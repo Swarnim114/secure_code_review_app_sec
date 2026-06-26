@@ -264,3 +264,60 @@ return send_file(target)
 
 ---
 
+### Finding 5
+
+**1. Vulnerability Title:**
+Insecure Password Hashing (MD5)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+`hashlib.md5()` is used to hash passwords. MD5 is cryptographically broken for this purpose — it is fast, unsalted here, and trivially crackable.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/utils.py`       |
+| Function Name              | `hash_password`                  |
+| Vulnerable Line Number(s)  | 6–7                              |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-327 — https://cwe.mitre.org/data/definitions/327.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+![Semgrep — MD5 password hashing utils.py line 7](screenshot/f5_sast.png)
+> Semgrep Rule: `python.lang.security.audit.md5-used-as-password.md5-used-as-password` — Line 7
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — hash_password() utils.py lines 6-7](screenshot/f5_code.png)
+> File: `supportdesk-app/utils.py` — Lines 6–7
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 7 is `return hashlib.md5(password.encode()).hexdigest()`. MD5 produces a 128-bit hash in nanoseconds and has no salt, making it vulnerable to rainbow table lookups and brute force at billions of hashes per second on modern GPUs.
+- **How the vulnerability could be exploited:** If the SQLite database (`supportdesk.db`) is exfiltrated via SQL Injection or Path Traversal, an attacker can crack all password hashes within minutes using tools like Hashcat.
+- **What makes it a True Positive:** `hashlib.md5()` is explicitly called in the password hashing function. Semgrep confirmed this at line 7.
+
+**7. Security Impact:**
+Mass account takeover following any database breach.
+
+**8. Recommended Remediation:**
+Replace with `bcrypt` or `argon2`:
+```python
+import bcrypt
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+def verify_password(password, password_hash):
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
+```
+
+**References:**
+- OWASP: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+- CWE-327: https://cwe.mitre.org/data/definitions/327.html
+
+---
+
