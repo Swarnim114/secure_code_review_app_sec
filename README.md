@@ -209,3 +209,58 @@ score = ast.literal_eval(formula)  # Only evaluates literals, not function calls
 
 ---
 
+### Finding 4
+
+**1. Vulnerability Title:**
+Path Traversal (Insecure File Download)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The `filename` path parameter is appended to `ATTACHMENTS_DIR` using simple string concatenation, with no path normalization or boundary check.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `download_attachment`            |
+| Vulnerable Line Number(s)  | 115–123                          |
+
+| Field               | Details                                                   |
+|---------------------|-----------------------------------------------------------|
+| CWE       | CWE-22 — https://cwe.mitre.org/data/definitions/22.html   |
+| Severity  | High                                                      |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. Semgrep did not flag this finding. This demonstrates the value of manual review beyond automated tools.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — download_attachment() app.py lines 115-123](screenshot/f4_code.png)
+> File: `supportdesk-app/app.py` — Lines 115–123
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 120 builds the path as `target = ATTACHMENTS_DIR + "/" + filename`. Flask's `<path:filename>` route converter allows `/` in the filename, so `../` sequences are accepted and the resulting path is never validated.
+- **How the vulnerability could be exploited:** A request to `/tickets/1/attachments/../../../../etc/passwd` causes `target` to resolve to `/etc/passwd`, which is then served by `send_file(target)`.
+- **What makes it a True Positive:** Compare with `preview_attachment` (lines 126–134) which correctly uses `resolve_within()` from `utils.py` to enforce boundary checks. `download_attachment` is missing this safeguard entirely.
+
+**7. Security Impact:**
+Arbitrary file read — disclosure of `/etc/passwd`, application source code, database files, or secret keys.
+
+**8. Recommended Remediation:**
+Use the already-available `resolve_within()` helper (as done in `preview_attachment`):
+```python
+target = resolve_within(ATTACHMENTS_DIR, filename)
+if target is None or not target.exists():
+    abort(404)
+return send_file(target)
+```
+
+**References:**
+- OWASP: https://owasp.org/www-community/attacks/Path_Traversal
+- CWE-22: https://cwe.mitre.org/data/definitions/22.html
+
+---
+
