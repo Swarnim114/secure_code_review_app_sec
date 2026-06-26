@@ -635,3 +635,60 @@ Remove the backdoor entirely. For demo/testing purposes, use proper ephemeral te
 
 ---
 
+### Finding 12
+
+**1. Vulnerability Title:**
+Unrestricted File Upload
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The file upload handler saves any uploaded file using its original filename and extension, with no MIME type validation, no extension allowlist, and no file size restriction.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `upload_attachment`              |
+| Vulnerable Line Number(s)  | 137–154                          |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-434 — https://cwe.mitre.org/data/definitions/434.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. Semgrep does not have rules to detect missing file validation.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — upload_attachment() no extension check app.py lines 137-154](screenshot/f12_code.png)
+> File: `supportdesk-app/app.py` — Lines 137–154
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 150: `save_path = os.path.join(ATTACHMENTS_DIR, uploaded.filename)` saves the file with its original filename. Lines 151–152 write it directly. There is no check on `uploaded.filename`'s extension, no MIME type check, and no `MAX_CONTENT_LENGTH` set.
+- **How the vulnerability could be exploited:** An attacker uploads `malicious.html` containing `<script>alert(document.cookie)</script>`. If the server serves it with `Content-Type: text/html`, it executes as XSS when another user downloads it. A `.php` or `.py` file could lead to RCE depending on server config.
+- **What makes it a True Positive:** The `uploaded.filename` is used as-is with no validation whatsoever. `werkzeug.utils.secure_filename` is not used.
+
+**7. Security Impact:**
+Stored XSS, server-side malware hosting, potential RCE, and DoS via large file uploads.
+
+**8. Recommended Remediation:**
+```python
+from werkzeug.utils import secure_filename
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg'}
+ext = uploaded.filename.rsplit('.', 1)[-1].lower()
+if ext not in ALLOWED_EXTENSIONS:
+    return jsonify({"error": "file type not allowed"}), 400
+filename = secure_filename(uploaded.filename)
+```
+Also set `app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024`.
+
+**References:**
+- OWASP: https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload
+- CWE-434: https://cwe.mitre.org/data/definitions/434.html
+
+---
+
