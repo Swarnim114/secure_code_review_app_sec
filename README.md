@@ -1018,3 +1018,55 @@ if not ticket or ticket["owner_id"] != user["id"]:
 
 ---
 
+### Finding 19
+
+**1. Vulnerability Title:**
+SQL Injection (False Positive)
+
+**2. Classification:**
+- True Positive
+- **False Positive**
+
+**Justification:**
+While string formatting is used in a SQL query, the formatted value comes exclusively from a hardcoded server-side dictionary — never from user input. No injection is possible.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/models.py`      |
+| Function Name              | `tickets_by_status`              |
+| Vulnerable Line Number(s)  | 130–138                          |
+
+| Field               | Details |
+|---------------------|---------|
+| CWE       | N/A     |
+| Severity  | N/A     |
+
+**4. Screenshot of SAST Tool Output:**
+![Semgrep — False positive SQL injection models.py line 136](screenshot/f19_sast.png)
+> Semgrep Rule: `python.lang.security.audit.formatted-sql-query.formatted-sql-query` and `python.sqlalchemy.security.sqlalchemy-execute-raw-query` — Line 136
+
+**5. Screenshot of Vulnerable Code:**
+![Code — tickets_by_status() safe STATUS_COLUMNS lookup models.py lines 123-138](screenshot/f19_code.png)
+> File: `supportdesk-app/models.py` — Lines 123–138
+
+**6. Why is it Vulnerable?**
+- **Why the code appears vulnerable:** Semgrep flags `sql = "SELECT * FROM tickets WHERE status = '{}'".format(column)` on line 135 as a potential SQL injection because `.format()` is used with a variable inside a SQL string.
+- **How the vulnerability could be exploited:** N/A
+- **What makes it a False Positive:** Tracing the data flow: `status` from the caller is looked up via `column = STATUS_COLUMNS.get(status)` on line 131. `STATUS_COLUMNS` is a hardcoded dictionary on lines 123–127 with only three known-safe string values: `"open"`, `"closed"`, `"pending"`. If `status` is anything else, `get()` returns `None` and line 132–133 returns `None` early. The `column` variable can therefore only ever be one of three safe, hardcoded strings. Semgrep cannot perform this data-flow reasoning and produces a false positive.
+
+**7. Security Impact:**
+None.
+
+**8. Recommended Remediation:**
+No remediation required. The code is safe as written. A code comment may be added to suppress the Semgrep warning and document the reasoning:
+```python
+# nosemgrep: formatted-sql-query — column is sourced exclusively from STATUS_COLUMNS dict, not user input
+```
+
+**References:**
+- N/A
+
+---
+
