@@ -692,3 +692,56 @@ Also set `app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024`.
 
 ---
 
+### Finding 13
+
+**1. Vulnerability Title:**
+Security Misconfiguration (Hardcoded Secret Key)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The Flask `SECRET_KEY` used to sign session cookies is hardcoded as a string literal in the source code, making it visible to anyone with access to the repository.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | N/A (Global/App Configuration)   |
+| Vulnerable Line Number(s)  | 20                               |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-321 — https://cwe.mitre.org/data/definitions/321.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+![Semgrep — Hardcoded SECRET_KEY app.py line 20](screenshot/f13_sast.png)
+> Semgrep Rule: `python.flask.security.audit.hardcoded-config.avoid_hardcoded_config_SECRET_KEY` — Line 20
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — hardcoded SECRET_KEY app.py line 20](screenshot/f13_code.png)
+> File: `supportdesk-app/app.py` — Line 20
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 20: `app.config["SECRET_KEY"] = "sd-prod-7f1a9c3e2b"`. Flask uses this key to HMAC-sign session cookies. If the key is known, the entire session security collapses.
+- **How the vulnerability could be exploited:** Using the tool `flask-unsign`, an attacker can forge a session cookie: `flask-unsign --sign --cookie "{'user_id': 3, 'role': 'admin'}" --secret "sd-prod-7f1a9c3e2b"`, gaining admin access without any credentials.
+- **What makes it a True Positive:** The secret key is in plaintext in source code. Semgrep confirmed this at line 20.
+
+**7. Security Impact:**
+Session forgery — complete authentication bypass and admin privilege escalation.
+
+**8. Recommended Remediation:**
+Load from environment variable and ensure it is never committed to source control:
+```python
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or os.urandom(32)
+```
+
+**References:**
+- OWASP: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+- CWE-321: https://cwe.mitre.org/data/definitions/321.html
+
+---
+
