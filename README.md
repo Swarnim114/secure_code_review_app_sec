@@ -155,3 +155,57 @@ output = subprocess.run(["ping", "-n", "1", host], capture_output=True, text=Tru
 
 ---
 
+### Finding 3
+
+**1. Vulnerability Title:**
+Remote Code Execution via `eval()` (Eval Injection)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The `formula` parameter from the HTTP request is passed without any sanitization directly into Python's `eval()` function, allowing arbitrary code execution.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `sla_score`                      |
+| Vulnerable Line Number(s)  | 162–164                          |
+
+| Field               | Details                                                   |
+|---------------------|-----------------------------------------------------------|
+| CWE       | CWE-95 — https://cwe.mitre.org/data/definitions/95.html   |
+| Severity  | Critical                                                  |
+
+**4. Screenshot of SAST Tool Output:**
+![Semgrep — Eval Injection app.py line 164](screenshot/f3_sast.png)
+> Semgrep Rules: `python.flask.security.injection.user-eval.eval-injection` and `python.lang.security.audit.eval-detected.eval-detected` — Line 164
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — sla_score() app.py lines 157-167](screenshot/f3_code.png)
+> File: `supportdesk-app/app.py` — Lines 157–167
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 162 reads `formula = request.args.get("formula", "1+1")` and line 164 calls `score = eval(formula)`. Python's `eval()` executes any valid Python expression, including imports and OS calls.
+- **How the vulnerability could be exploited:** An attacker sends `?formula=__import__('os').popen('id').read()` which returns the server's user identity, or `__import__('os').system('rm -rf /')` for destructive attacks.
+- **What makes it a True Positive:** User-controlled input flows directly into `eval()` with no sandboxing. Semgrep confirmed with three separate rules flagging line 164.
+
+**7. Security Impact:**
+Remote Code Execution (RCE) — full server takeover.
+
+**8. Recommended Remediation:**
+Avoid `eval()` entirely. For math expressions, use `ast.literal_eval()` or a safe math library:
+```python
+import ast
+score = ast.literal_eval(formula)  # Only evaluates literals, not function calls
+```
+
+**References:**
+- OWASP: https://owasp.org/www-community/attacks/Code_Injection
+- CWE-95: https://cwe.mitre.org/data/definitions/95.html
+
+---
+
