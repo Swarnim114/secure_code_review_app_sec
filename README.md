@@ -529,3 +529,58 @@ Better yet, define the escalation cost server-side and don't accept it from the 
 
 ---
 
+### Finding 10
+
+**1. Vulnerability Title:**
+Race Condition — Time-of-Check to Time-of-Use (TOCTOU)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+An intentional `time.sleep(0.2)` introduces a race window between the credit balance check and the deduction, allowing concurrent requests to exploit the same balance.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `escalate`                       |
+| Vulnerable Line Number(s)  | 176–180                          |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-362 — https://cwe.mitre.org/data/definitions/362.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. Race conditions are not detectable by SAST tools.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — escalate() TOCTOU gap app.py lines 176-180](screenshot/f10_code.png)
+> File: `supportdesk-app/app.py` — Lines 170–182
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 176 reads `balance = models.get_credits(user["id"])`. Line 179 then sleeps `0.2` seconds. Line 180 writes `models.set_credits(user["id"], balance - cost)`. If 10 threads hit this simultaneously, all 10 read `balance=5` before any write occurs — each then writes `5 - 1 = 4`, consuming only 1 credit total for 10 escalations.
+- **How the vulnerability could be exploited:** Using a script to fire 10 simultaneous HTTP POST requests to the escalation endpoint results in 10 tickets being escalated at the cost of 1 credit.
+- **What makes it a True Positive:** The `time.sleep(0.2)` is deliberate and specifically creates the TOCTOU window. This is a textbook race condition.
+
+**7. Security Impact:**
+Unlimited free escalations via concurrent requests; financial/credit abuse.
+
+**8. Recommended Remediation:**
+Use an atomic database operation that checks and updates in one step:
+```python
+# Atomic decrement — only succeeds if balance >= cost
+conn.execute("UPDATE users SET escalation_credits = escalation_credits - ? WHERE id = ? AND escalation_credits >= ?", (cost, user_id, cost))
+if conn.execute("SELECT changes()").fetchone()[0] == 0:
+    return jsonify({"error": "not enough credits"}), 400
+```
+
+**References:**
+- OWASP: https://owasp.org/www-community/vulnerabilities/Race_Condition
+- CWE-362: https://cwe.mitre.org/data/definitions/362.html
+
+---
+
