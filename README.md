@@ -798,3 +798,58 @@ app.run(debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
 
 ---
 
+### Finding 15
+
+**1. Vulnerability Title:**
+Cross-Site Request Forgery (CSRF)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+All state-changing POST forms in the application lack CSRF tokens, making them vulnerable to cross-origin forged requests from malicious websites.
+
+**3. Source File Information:**
+
+| Field                      | Details                                        |
+|----------------------------|------------------------------------------------|
+| File Name                  | `supportdesk-app/templates/ticket.html`        |
+| Function Name              | N/A (HTML Template)                            |
+| Vulnerable Line Number(s)  | 14–17, 25–28, 39–44                            |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-352 — https://cwe.mitre.org/data/definitions/352.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+![Semgrep — Missing CSRF token ticket.html lines 14 25 39](screenshot/f15_sast.png)
+> Semgrep Rule: `python.django.security.django-no-csrf-token.django-no-csrf-token` — Lines 14, 25, 39 of `ticket.html`
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — POST forms without CSRF token ticket.html](screenshot/f15_code.png)
+> File: `supportdesk-app/templates/ticket.html` — Lines 14, 25, 39
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** The forms for escalation, comment posting, and file upload use `<form method="POST">` with no `{% csrf_token %}` or equivalent. Session cookies are `SameSite` by default in newer browsers but the app does not explicitly set this. Older browsers and certain configurations send cookies cross-origin.
+- **How the vulnerability could be exploited:** An attacker hosts a page with `<form action="https://target.com/tickets/1/escalate" method="POST"><input name="cost" value="5"></form>` and auto-submits it. When a logged-in victim visits, their browser silently sends the request with their session cookie.
+- **What makes it a True Positive:** Semgrep confirmed the absence of CSRF tokens on all three forms in `ticket.html`.
+
+**7. Security Impact:**
+Unauthorized state changes on behalf of authenticated users — forced escalations, forged comments, malicious file uploads.
+
+**8. Recommended Remediation:**
+Use Flask-WTF which provides CSRF protection automatically:
+```python
+from flask_wtf.csrf import CSRFProtect
+csrf = CSRFProtect(app)
+```
+And in templates: `<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>`
+
+**References:**
+- OWASP: https://owasp.org/www-community/attacks/csrf
+- CWE-352: https://cwe.mitre.org/data/definitions/352.html
+
+---
+
