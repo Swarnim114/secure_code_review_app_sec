@@ -964,3 +964,57 @@ def login():
 
 ---
 
+### Finding 18
+
+**1. Vulnerability Title:**
+Insecure Direct Object Reference (IDOR) — Uploading Attachments to Other Tickets
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The file upload endpoint does not verify that the target `ticket_id` belongs to the currently logged-in user before attaching the file.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `upload_attachment`              |
+| Vulnerable Line Number(s)  | 137–154                          |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-639 — https://cwe.mitre.org/data/definitions/639.html  |
+| Severity  | Medium                                                     |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — upload_attachment() no ownership check app.py line 153](screenshot/f18_code.png)
+> File: `supportdesk-app/app.py` — Lines 137–154
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 153: `models.add_attachment(ticket_id, uploaded.filename, fingerprint)` uses `ticket_id` directly from the URL parameter (`<int:ticket_id>`) without ever calling `models.get_ticket(ticket_id)` to verify the ticket's `owner_id` matches `user["id"]`.
+- **How the vulnerability could be exploited:** User `alice` can POST to `/tickets/2/upload` (bob's ticket) and attach any file, including an HTML file that performs XSS on anyone who views bob's ticket.
+- **What makes it a True Positive:** The ownership check that exists conceptually (evident from the `owner_id` column in the schema) is entirely absent in this route.
+
+**7. Security Impact:**
+Data tampering — attaching malicious files to other users' tickets, potential Stored XSS targeting other users.
+
+**8. Recommended Remediation:**
+Fetch the ticket and verify ownership before accepting the upload:
+```python
+ticket = models.get_ticket(ticket_id)
+if not ticket or ticket["owner_id"] != user["id"]:
+    abort(403)
+```
+
+**References:**
+- OWASP: https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html
+- CWE-639: https://cwe.mitre.org/data/definitions/639.html
+
+---
+
