@@ -370,3 +370,56 @@ Remove the `|safe` filter: change `{{ c.body|safe }}` to `{{ c.body }}`. If rich
 
 ---
 
+### Finding 7
+
+**1. Vulnerability Title:**
+Broken Access Control (Admin Bypass)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The `/admin/reports` route only checks if a user is logged in, not whether they have the `admin` role. Any authenticated regular user can access administrative data.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `admin_reports`                  |
+| Vulnerable Line Number(s)  | 207–213                          |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-285 — https://cwe.mitre.org/data/definitions/285.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. This is a logic-level flaw that SAST tools generally cannot detect.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — admin_reports() app.py lines 207-213](screenshot/f7_code.png)
+> File: `supportdesk-app/app.py` — Lines 207–213
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Lines 208–211 check `if not user: return redirect(...)` but never check `user["role"] == "admin"`. The session stores `role` (line 59: `session["role"] = user["role"]`) but it is never used in this route.
+- **How the vulnerability could be exploited:** User `alice` (role: `user`) can browse directly to `/admin/reports` and see all tickets from all users via `models.all_tickets()`.
+- **What makes it a True Positive:** The role-based authorization check is completely absent. The database schema has a `role` field, and `carol` is the only `admin`, confirming the intent was to restrict access.
+
+**7. Security Impact:**
+Privilege escalation — any user gains read access to all support tickets across all users.
+
+**8. Recommended Remediation:**
+Add a role check immediately after the login check:
+```python
+if not user or user["role"] != "admin":
+    abort(403)
+```
+
+**References:**
+- OWASP: https://owasp.org/www-project-top-ten/2021/A01_2021-Broken_Access_Control
+- CWE-285: https://cwe.mitre.org/data/definitions/285.html
+
+---
+
