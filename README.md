@@ -1070,3 +1070,49 @@ No remediation required. The code is safe as written. A code comment may be adde
 
 ---
 
+### Finding 20
+
+**1. Vulnerability Title:**
+OS Command Injection (False Positive)
+
+**2. Classification:**
+- True Positive
+- **False Positive**
+
+**Justification:**
+User input is strictly validated with `ipaddress.ip_address()` before it reaches the `os.popen()` shell call, making injection impossible.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `ping_internal`                  |
+| Vulnerable Line Number(s)  | 195–204                          |
+
+| Field               | Details |
+|---------------------|---------|
+| CWE       | N/A     |
+| Severity  | N/A     |
+
+**4. Screenshot of SAST Tool Output:**
+![Semgrep — False positive OS command injection app.py line 203](screenshot/f20_sast.png)
+> Semgrep Rule: `python.lang.security.dangerous-system-call.dangerous-system-call` — Line 203
+
+**5. Screenshot of Vulnerable Code:**
+![Code — ping_internal() with is_valid_ip() guard app.py lines 195-204](screenshot/f20_code.png)
+> File: `supportdesk-app/app.py` — Lines 195–204
+
+**6. Why is it Vulnerable?**
+- **Why the code appears vulnerable:** Semgrep detects `os.popen("ping -n 1 " + host).read()` on line 203 and traces `host` back to `request.args.get("host")` — a user-controlled source — which triggers the dangerous-system-call rule.
+- **How the vulnerability could be exploited:** N/A
+- **What makes it a False Positive:** Before line 203, line 201 calls `if not is_valid_ip(host): return jsonify({"error": "..."}), 400`. The `is_valid_ip()` function in `utils.py` (lines 18–23) uses `ipaddress.ip_address(value)` which is Python's standard library parser. It raises `ValueError` for any non-IP input — all shell metacharacters (`;`, `&`, `|`, `$`, backticks, spaces) cause it to fail. Semgrep performs taint analysis but cannot reason about the semantics of `ipaddress.ip_address()` as a validator, producing a false positive. Compare with `ping` (Finding 2) which has *no* such validation.
+
+**7. Security Impact:**
+None.
+
+**8. Recommended Remediation:**
+No remediation required. The existing IP validation is sufficient. For defence-in-depth, consider switching to `subprocess` with a list argument to remove any residual shell risk, even if currently unexploitable.
+
+**References:**
+- N/A
