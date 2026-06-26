@@ -853,3 +853,56 @@ And in templates: `<input type="hidden" name="csrf_token" value="{{ csrf_token()
 
 ---
 
+### Finding 16
+
+**1. Vulnerability Title:**
+In-Memory File Processing Denial of Service (DoS)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The upload handler reads the entire uploaded file into memory at once with no size limit configured, enabling memory exhaustion via a large file.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `upload_attachment`              |
+| Vulnerable Line Number(s)  | 145                              |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-400 — https://cwe.mitre.org/data/definitions/400.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — unbounded uploaded.read() app.py line 145](screenshot/f16_code.png)
+> File: `supportdesk-app/app.py` — Line 145
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 145: `data = uploaded.read()` reads the entire file content into a Python bytes object in RAM. Flask has no `MAX_CONTENT_LENGTH` set (line 20 sets `SECRET_KEY` but not content length), so there is no upper bound.
+- **How the vulnerability could be exploited:** An attacker uploads a 10 GB file. The server attempts to load the entire file into RAM, consuming all available memory and crashing the process, making the application unavailable for all users.
+- **What makes it a True Positive:** `uploaded.read()` without a size limit, combined with no `MAX_CONTENT_LENGTH` Flask config, is confirmed by reading both line 145 and the app config on line 20.
+
+**7. Security Impact:**
+Denial of Service — application crash and unavailability for all users.
+
+**8. Recommended Remediation:**
+Set a max size and stream to disk instead of loading into memory:
+```python
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+# Flask will automatically reject larger uploads with 413 error
+```
+
+**References:**
+- OWASP: https://owasp.org/www-community/vulnerabilities/Denial_of_Service
+- CWE-400: https://cwe.mitre.org/data/definitions/400.html
+
+---
+
