@@ -423,3 +423,56 @@ if not user or user["role"] != "admin":
 
 ---
 
+### Finding 8
+
+**1. Vulnerability Title:**
+Insecure Direct Object Reference (IDOR) — Viewing Tickets
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The `view_ticket` route fetches a ticket by its ID from the database but never verifies that the requesting user is the ticket's owner.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `view_ticket`                    |
+| Vulnerable Line Number(s)  | 93–102                           |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-639 — https://cwe.mitre.org/data/definitions/639.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. SAST tools cannot detect missing authorization checks.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — view_ticket() app.py lines 93-102](screenshot/f8_code.png)
+> File: `supportdesk-app/app.py` — Lines 93–102
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 98 fetches `ticket = models.get_ticket(ticket_id)` and line 100 returns it without ever comparing `ticket["owner_id"]` to `session["user_id"]`.
+- **How the vulnerability could be exploited:** User `alice` (id=1) can change the URL from `/tickets/1` to `/tickets/2` to view `bob`'s private ticket ("Laptop won't boot").
+- **What makes it a True Positive:** The database schema stores `owner_id` on tickets, clearly intended for ownership validation. The validation is simply missing.
+
+**7. Security Impact:**
+Unauthorized disclosure of any user's support ticket content.
+
+**8. Recommended Remediation:**
+Add an ownership check after fetching the ticket:
+```python
+if ticket["owner_id"] != user["id"]:
+    abort(403)
+```
+
+**References:**
+- OWASP: https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html
+- CWE-639: https://cwe.mitre.org/data/definitions/639.html
+
+---
+
