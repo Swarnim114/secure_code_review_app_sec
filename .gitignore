@@ -1,0 +1,5 @@
+.obsidian/
+*.db
+__pycache__/
+*.pyc
+screenshots.md
