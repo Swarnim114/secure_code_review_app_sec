@@ -476,3 +476,56 @@ if ticket["owner_id"] != user["id"]:
 
 ---
 
+### Finding 9
+
+**1. Vulnerability Title:**
+Business Logic Flaw (Negative Escalation Cost)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The `cost` parameter is taken directly from user input as an integer with no lower-bound validation, allowing negative values to be submitted.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `escalate`                       |
+| Vulnerable Line Number(s)  | 175–180                          |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-840 — https://cwe.mitre.org/data/definitions/840.html  |
+| Severity  | Medium                                                     |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. This is a business logic flaw invisible to SAST tools.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — escalate() app.py line 175 no positive validation](screenshot/f9_code.png)
+> File: `supportdesk-app/app.py` — Lines 170–182
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 175: `cost = int(request.form.get("cost", 1))`. The only guard on line 177 is `balance < cost`, which checks `5 < -1000` — false — so it passes. Line 180 then computes `balance - (-1000) = 1005`, inflating credits.
+- **How the vulnerability could be exploited:** Submitting `cost=-1000` to `/tickets/1/escalate` turns 5 credits into 1005 credits at no real cost.
+- **What makes it a True Positive:** Mathematical logic flaw confirmed by tracing the code flow. No positive-value constraint exists anywhere.
+
+**7. Security Impact:**
+Unlimited free ticket escalations; abuse of application credit economy.
+
+**8. Recommended Remediation:**
+Validate cost server-side and never trust it from client input:
+```python
+cost = max(1, int(request.form.get("cost", 1)))
+```
+Better yet, define the escalation cost server-side and don't accept it from the client at all.
+
+**References:**
+- OWASP: https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/10-Business_Logic_Testing/
+- CWE-840: https://cwe.mitre.org/data/definitions/840.html
+
+---
+
