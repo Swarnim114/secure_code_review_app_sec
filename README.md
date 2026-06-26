@@ -745,3 +745,56 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or os.urandom(32)
 
 ---
 
+### Finding 14
+
+**1. Vulnerability Title:**
+Security Misconfiguration (Debug Mode Enabled)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+Flask is started with `debug=True` hardcoded on line 220, which enables the interactive Werkzeug debugger and verbose stack traces in production.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | N/A (App Entry Point)            |
+| Vulnerable Line Number(s)  | 220                              |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-489 — https://cwe.mitre.org/data/definitions/489.html  |
+| Severity  | Medium                                                     |
+
+**4. Screenshot of SAST Tool Output:**
+![Semgrep — Debug mode enabled app.py line 220](screenshot/f14_sast.png)
+> Semgrep Rule: `python.flask.security.audit.debug-enabled.debug-enabled` — Line 220
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — debug=True app.py line 220](screenshot/f14_code.png)
+> File: `supportdesk-app/app.py` — Line 220
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 220: `app.run(debug=True, host="0.0.0.0", port=5050)`. With `debug=True`, Flask/Werkzeug exposes an interactive Python console on every error page, protected only by a PIN. The PIN can be brute-forced or bypassed on certain system configurations.
+- **How the vulnerability could be exploited:** Triggering any unhandled exception (e.g., a malformed request) shows a stack trace leaking server paths, environment variables, and code. The Werkzeug console can then be used for RCE. This was the actual attack vector in the [Patreon breach (2015)](https://labs.detectify.com/2015/10/02/how-patreon-got-hacked-publicly-exposed-werkzeug-debugger/).
+- **What makes it a True Positive:** `debug=True` is hardcoded. Semgrep confirmed this at line 220.
+
+**7. Security Impact:**
+Information disclosure (stack traces, env vars) and potential Remote Code Execution via Werkzeug debugger console.
+
+**8. Recommended Remediation:**
+Never hardcode `debug=True`. Use environment variables:
+```python
+app.run(debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
+```
+
+**References:**
+- OWASP: https://owasp.org/www-project-top-ten/2017/A6_2017-Security_Misconfiguration
+- CWE-489: https://cwe.mitre.org/data/definitions/489.html
+
+---
+
