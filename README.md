@@ -584,3 +584,54 @@ if conn.execute("SELECT changes()").fetchone()[0] == 0:
 
 ---
 
+### Finding 11
+
+**1. Vulnerability Title:**
+Hardcoded Backdoor / Authentication Bypass
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+A static hardcoded token `ANALYTICS_DEMO_TOKEN = "demo-sandbox-9f3a21"` (line 25) bypasses the normal username/password authentication entirely.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `login`                          |
+| Vulnerable Line Number(s)  | 25, 51–52                        |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-798 — https://cwe.mitre.org/data/definitions/798.html  |
+| Severity  | Critical                                                   |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. Semgrep flagged the `SECRET_KEY` but not this specific token.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — backdoor token definition app.py line 25](screenshot/f11_code_a.png)
+
+![Vulnerable code — backdoor bypass check app.py lines 51-52](screenshot/f11_code_b.png)
+> File: `supportdesk-app/app.py` — Lines 25 and 51–52
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** Line 51 checks `if app.config["ENV_MODE"] == "demo" and request.args.get("token") == ANALYTICS_DEMO_TOKEN`. When this matches, `enable_sandbox_account()` is called on line 52, bypassing all credential validation. The `ENV_MODE` defaults to `"production"` (line 21) but can be overridden via environment variable.
+- **How the vulnerability could be exploited:** If the environment variable `SUPPORTDESK_ENV=demo` is set (a common misconfiguration), visiting `/login?token=demo-sandbox-9f3a21` grants instant authenticated access to any account.
+- **What makes it a True Positive:** The hardcoded token is committed to source code and serves as a master key that completely bypasses authentication.
+
+**7. Security Impact:**
+Complete authentication bypass — full account and application compromise.
+
+**8. Recommended Remediation:**
+Remove the backdoor entirely. For demo/testing purposes, use proper ephemeral test accounts managed separately from the codebase.
+
+**References:**
+- OWASP: https://owasp.org/www-community/vulnerabilities/Use_of_hard-coded_password
+- CWE-798: https://cwe.mitre.org/data/definitions/798.html
+
+---
+
