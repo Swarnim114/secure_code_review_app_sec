@@ -906,3 +906,61 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 ---
 
+### Finding 17
+
+**1. Vulnerability Title:**
+Missing Rate Limiting (Brute Force on Login)
+
+**2. Classification:**
+- **True Positive**
+- False Positive
+
+**Justification:**
+The `/login` endpoint allows unlimited POST requests with no delay, lockout, or CAPTCHA, making it fully susceptible to automated password brute forcing.
+
+**3. Source File Information:**
+
+| Field                      | Details                          |
+|----------------------------|----------------------------------|
+| File Name                  | `supportdesk-app/app.py`         |
+| Function Name              | `login`                          |
+| Vulnerable Line Number(s)  | 48–62                            |
+
+| Field               | Details                                                    |
+|---------------------|------------------------------------------------------------|
+| CWE       | CWE-307 — https://cwe.mitre.org/data/definitions/307.html  |
+| Severity  | High                                                       |
+
+**4. Screenshot of SAST Tool Output:**
+> Identified via Manual Code Review. Rate limiting absence is a logic-level issue SAST tools cannot detect.
+
+**5. Screenshot of Vulnerable Code:**
+![Vulnerable code — login() no rate limiting app.py lines 48-62](screenshot/f17_code.png)
+> File: `supportdesk-app/app.py` — Lines 48–62
+
+**6. Why is it Vulnerable?**
+- **Why the code is vulnerable:** The entire login function (lines 48–62) contains no counter, no sleep, no lockout, and no CAPTCHA. Each failed attempt simply sets `error = "Invalid username or password"` and returns. The function can be called thousands of times per second.
+- **How the vulnerability could be exploited:** Using `hydra` or `burp intruder` with a password wordlist, an attacker can try tens of thousands of passwords against `alice`'s account. Given the MD5 hashing (Finding 5), common passwords would also be in rainbow tables.
+- **What makes it a True Positive:** There is verifiably no rate limiting, account lockout, or IP-based throttling anywhere in the codebase.
+
+**7. Security Impact:**
+Account takeover via brute force — especially dangerous combined with weak MD5 password hashing (Finding 5).
+
+**8. Recommended Remediation:**
+Use Flask-Limiter:
+```python
+from flask_limiter import Limiter
+limiter = Limiter(app, key_func=get_remote_address)
+
+@app.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
+def login():
+    ...
+```
+
+**References:**
+- OWASP: https://owasp.org/www-community/controls/Blocking_Brute_Force_Attacks
+- CWE-307: https://cwe.mitre.org/data/definitions/307.html
+
+---
+
